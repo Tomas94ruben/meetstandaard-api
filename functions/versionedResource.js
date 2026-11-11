@@ -58,9 +58,11 @@ const MAX_AGE_INDEX = 300;
 // echoed in a header so a client that did not pin can still see, and log, which
 // version it actually received. `immutable` says the caller asked for one
 // specific version and can therefore never get a different answer.
-export const sendCached = (request, response, payload, version, immutable = false) => {
+export const sendCached = (request, response, payload, version, immutable = false, cacheVariant = "") => {
   const body = JSON.stringify(payload);
-  const etag = `"${crypto.createHash("sha1").update(body).digest("hex")}"`;
+  // Query strings already separate HTTP cache entries. The namespace also
+  // prevents a conditional request from crossing views with identical bodies.
+  const etag = `"${crypto.createHash("sha1").update(cacheVariant + body).digest("hex")}"`;
 
   response.set("Cache-Control", `public, max-age=${immutable ? MAX_AGE_IMMUTABLE : MAX_AGE_INDEX}`);
   response.set("ETag", etag);
@@ -77,7 +79,7 @@ export const sendCached = (request, response, payload, version, immutable = fals
 export const sendError = (response, status, body) =>
   response.status(status).json(typeof body === "string" ? { error: body } : body);
 
-const sendVersion = async (firestore, collection, request, response, version, versions, immutable) => {
+const sendVersion = async (firestore, collection, request, response, version, versions, immutable, projecteer, cacheVariant) => {
   if (!VERSION_FORMAT.test(version)) {
     return sendError(response, 404, { error: `Unknown version: ${version}`, versions });
   }
@@ -87,7 +89,8 @@ const sendVersion = async (firestore, collection, request, response, version, ve
     // List what does exist, so picking the right version takes one request.
     return sendError(response, 404, { error: `Unknown version: ${version}`, versions });
   }
-  return sendCached(request, response, doc.data(), version, immutable);
+  const payload = doc.data();
+  return sendCached(request, response, projecteer ? projecteer(payload) : payload, version, immutable, cacheVariant);
 };
 
 // Routing matches the trailing path segments, so it works regardless of how the
@@ -101,6 +104,8 @@ export const handleVersionedResource = async ({
   resourceSegment,
   request,
   response,
+  projecteer,
+  cacheVariant,
 }) => {
   const segments = (request.path || "/").split("/").filter(Boolean);
   const last = segments[segments.length - 1];
@@ -118,7 +123,7 @@ export const handleVersionedResource = async ({
   const latest = versions[versions.length - 1] ?? null;
 
   if (isIndex) {
-    return sendCached(request, response, { versions, latest });
+    return sendCached(request, response, { versions, latest }, undefined, false, cacheVariant);
   }
 
   if (!latest) {
@@ -126,5 +131,5 @@ export const handleVersionedResource = async ({
   }
 
   const version = isResource ? latest : decodeURIComponent(last);
-  return sendVersion(firestore, collection, request, response, version, versions, isPinned);
+  return sendVersion(firestore, collection, request, response, version, versions, isPinned, projecteer, cacheVariant);
 };

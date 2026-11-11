@@ -1,4 +1,5 @@
 import { handleVersionedResource, sendCached, sendError } from "./versionedResource.js";
+import { publiekeWeergave } from "./publiekeWeergave.js";
 import energiearmoede09 from "./data/meetstandaard-energiearmoede-0.9.json" with { type: "json" };
 import energiearmoede010 from "./data/meetstandaard-energiearmoede-0.10.json" with { type: "json" };
 import energiearmoede011 from "./data/meetstandaard-energiearmoede-0.11.json" with { type: "json" };
@@ -120,6 +121,12 @@ const sectorIndex = (request) => ({
 //   GET .../meetstandaard/{sector}/versions   -> version index for that standaard
 //   GET .../meetstandaard/{sector}/{version}  -> pinned version (404 if unknown)
 export const handleMeetstandaard = async (firestore, request, response) => {
+  const weergave = request.query?.weergave;
+  if (weergave !== undefined && weergave !== "publiek") {
+    return sendError(response, 400, "Onbekende weergave: gebruik ?weergave=publiek of laat weergave weg voor het volledige document.");
+  }
+  response.set("X-Meetstandaard-Weergave", weergave ?? "volledig");
+  response.set("Access-Control-Expose-Headers", "X-Meetstandaard-Weergave, X-Meetstandaard-Version, ETag");
   const segments = (request.path || "/").split("/").filter(Boolean);
   const last = segments[segments.length - 1];
   const prev = segments[segments.length - 2];
@@ -132,7 +139,7 @@ export const handleMeetstandaard = async (firestore, request, response) => {
     // `last` is undefined when the function is hit at its bare URL (path "/"),
     // which is the natural place to discover what this endpoint serves.
     if (!last || last === "meetstandaard") {
-      return sendCached(request, response, sectorIndex(request));
+      return sendCached(request, response, sectorIndex(request), undefined, false, weergave === "publiek" ? "publiek:" : "");
     }
     // Versions are per standaard, so a bare /versions is a route mistake rather
     // than an unknown sector — say so instead of blaming the sector name.
@@ -152,6 +159,8 @@ export const handleMeetstandaard = async (firestore, request, response) => {
     firestore,
     collection: STANDAARDEN[sector].collection,
     resourceSegment: sector,
+    projecteer: weergave === "publiek" ? publiekeWeergave : undefined,
+    cacheVariant: weergave === "publiek" ? "publiek:" : "",
     request,
     response,
   });

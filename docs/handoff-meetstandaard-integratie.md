@@ -27,6 +27,27 @@ See [versionering.md](versionering.md) for the contract. Short version: **reques
 
 ## 2. Document shape
 
+### Website publication
+
+Append `?weergave=publiek` to any sector document URL, including pinned versions:
+
+| Request | Returns |
+|---|---|
+| `GET {base}/api/v1/meetstandaard/arbeidsparticipatie/1.2?weergave=publiek` | Pinned standard, filtered for publication |
+| `GET {base}/api/v1/meetstandaard/energiearmoede?weergave=publiek` | Latest standard, filtered for publication |
+| Same URL without `weergave` | Full document |
+| Another `weergave` value, including `volledig` | `400` with a corrective message |
+
+All sectors use this contract, including intervention libraries. Indexes accept the query and retain their discovery contents. `X-Meetstandaard-Weergave` confirms `publiek` or `volledig`; `X-Meetstandaard-Version` still identifies the source version. Both headers and `ETag` are readable through CORS.
+
+The public view omits internal provenance and formulation notes. Render `voorlopig: true` as a visible provisional badge on the object that carries it; the corresponding text says `voorlopige aanname`. A flag on a proxy does not imply a flag on its niveau. Keep rendering `controle` and its inconsistencies. Missing amounts remain `null`, never `0`; amounts, totals, overlap data and array counts are unchanged. Author/year/page citations remain, while local file references disappear.
+
+The filter edits only inventoried free-text fields. Identifiers, enums, numeric strings and URLs retain their exact values. An uncertainty marker in an enum retains its original spelling and sets the containing object's `voorlopig` flag. Source citations stay nonempty, including source PDF URLs and their query strings. A `bestand` field containing an HTTP(S) URL is preserved as a public source. Readable report titles and chapter names remain after workbook coordinates and internal fragments are removed.
+
+Cache separately by the **complete URL, including the query**, and store ETags per view. Latest responses cache for 300 seconds; pinned responses for 31536000 seconds. The source version pins the data; the publication filter follows deployed function code (ADR-009).
+
+### Full document
+
 ```jsonc
 {
   "meta": {

@@ -190,3 +190,38 @@ De conventie is bevestigd (2026-08-24): **niet geregistreerd betekent positief.*
 - Dit is hetzelfde patroon als `afgeleid: true` op een afgeleide aanname in ADR-007: de waarde is bruikbaar, en dat hij is afgeleid blijft zichtbaar.
 - **De duurzame oplossing ligt in de bron, niet hier.** Zolang `posNeg` in de `effects`-collectie leeg blijft, leidt elke regeneratie het opnieuw af. Zet het veld expliciet bij de migratie uit `docs/migratie-standaarden.md`, dan verdwijnt de afleiding vanzelf.
 - Het alternatief — `null` publiceren — is verworpen omdat het een bevestigde conventie behandelt als onbekend, en daarmee 65 stellingen onbruikbaar maakt zonder dat er iets onzeker aan is.
+
+---
+
+## ADR-009: A public view removes internal provenance, while keeping uncertainty visible
+
+**Date:** 2026-11-11 · **Status:** Accepted
+
+### Context
+
+The website needs the published standard without local file paths, team notes or editorial history. Removing provisional findings would make the standard appear more certain than its sources (ADR-005).
+
+### Decision
+
+Serve `?weergave=publiek` as a pure function projection at read time, for every sector and version in `STANDAARDEN`. The default response and generated documents keep their full contents.
+
+| Public view | Reason |
+|---|---|
+| Remove `aannamescore`, `onderbouwingHerschreven`, `document`, `bestand`, `wikipagina`, `audit`, `bronbedragVastgesteld`, `generatedBy` | Retired rating, editorial workflow or local provenance |
+| Remove `stellingen[].toelichting` and `situatieschetsen[].toelichting` | Internal formulation notes; other `toelichting` fields remain |
+| Filter inventoried free-text keys in `VRIJE_TEKST_SLEUTELS` | Remove the smallest internal fragment bounded by parentheses, commas, semicolons or sentence boundaries. Preserve readable report and chapter titles, authors, years and pages |
+| Keep identifiers, slugs, uid, enum values, standalone URLs and numeric strings exact | Unknown keys pass through pending schema review. Free-text array items inherit their field policy |
+| Protect every HTTP(S) URL before text filtering | Preserve PDF filenames, paths and query strings inside source URLs |
+| Keep `bestand` when its value is an HTTP(S) URL | Older wijkbedrijven sources store public CBS webpublications in this field |
+| Preserve a nonempty source field whenever its original text contains a citation | Regression invariants cover every served document, source URLs and author/organisation plus year |
+| Replace free-text `needs verification` / `(nv)` with `voorlopige aanname` and add `voorlopig: true` to the containing object | Enum markers remain exact. The flag also records markers in removed notes |
+| Keep numbers, `null`, arrays, `controle`, original scales, overlap fields and previous effect ids | ADR-005: expose missing values and source contradictions; never reconcile them in presentation |
+
+### Consequences
+
+- The function decides what is public, as it already does for feedback. No seed or Firestore change is involved.
+- Flags belong to the nearest containing object, including parameters and source objects; they do not propagate from a proxy to a niveau. A marker in a string array flags that array's containing object.
+- Deleted metadata can contain numbers (for example an old assumption rating). All numbers in retained fields stay identical, including every amount and total.
+- ETags are calculated after projection and use a separate public namespace, including identical bodies and indexes. Cache URLs include the query; `X-Meetstandaard-Weergave` names the representation.
+- The document version pins source data. The public editorial projection follows function code; changing it requires deploying that code. Consumers cache by full URL and view, and respect the returned cache lifetime.
+- Tests cover every registered document and version, exact retained numbers/nulls, array lengths, uncertainty ownership and routing/cache isolation. New fields need an explicit publication review.

@@ -19,6 +19,21 @@ GET /api/v1/meetstandaard/{sector}[/{version}]
 
 Publishing a new version needs **no deploy** — versions are resolved from Firestore per request. A deploy is only needed when code changes, including the `STANDAARDEN` registry.
 
+### Public view
+
+`functions/publiekeWeergave.js` is a pure read-time projection, selected by `?weergave=publiek` on every sector/version route. It filters internal provenance, leaving generated JSON and Firestore untouched. Without the query, the full document is served.
+
+The explicit `VRIJE_TEKST_SLEUTELS` inventory selects free text. Identifiers, enum values, numeric strings, standalone URLs and unknown fields pass through exactly. Filtering works on parenthetical, comma and semicolon fragments. HTTP(S) URLs are protected before filtering. Source fields containing a citation stay nonempty, verified across every registered document. Readable workbook titles and chapter names survive coordinate removal. Dated revision clauses and user-decision notes are removed. Statutory decision titles remain public.
+
+| Contract | Behaviour |
+|---|---|
+| Uncertainty | `voorlopige aanname` in text and `voorlopig: true` on its containing object; `controle`, numbers and `null` remain (ADR-005) |
+| Caching | Projection precedes `sendCached`; public ETags have their own namespace; cache by the complete URL |
+| Response header | `X-Meetstandaard-Weergave: publiek` or `volledig`, exposed through CORS |
+| Invalid query | `400`; only `publiek` or an absent query is accepted |
+
+See ADR-009 for the field policy and the consumer handoff for examples.
+
 ### The registry
 
 `functions/meetstandaard.js` exports `STANDAARDEN`: one entry per published standaard, mapping a url segment to a Firestore collection and its committed documents. `src/standaarden.js` is the panel's equivalent. **A new standaard is two registry entries and a generated document — nothing else.**
